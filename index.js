@@ -19,13 +19,37 @@ async function run(){
     try{
         const campaignCollection = client.db("fund-future").collection('Campaigns');
         const donationCollection = client.db("fund-future").collection('Donation');
-    
+
+
+        //JWT
+        app.get('/my-campaigns',async(req,res)=>{
+
+            const query = {campaigner_mail: req.query.email}
+            const campaigns = await campaignCollection.find(query).toArray();
+
+            const donation_query ={donor_mail: req.query.email}
+            const donations = await donationCollection.find(donation_query).toArray();
+
+            
+            
+
+            res.send(campaigns);
+        })
+
+
+        //this two will be merged later using conditional query
         app.get('/campaigns',async(req,res)=>{
             const query = {}
             const cursor = campaignCollection.find(query);
             const campaigns = await cursor.toArray();
             res.send(campaigns);
         })
+
+
+
+
+
+
 
         app.get('/campaign/:id',async(req,res)=>{
             const id = req.params.id;
@@ -43,14 +67,18 @@ async function run(){
    
         })
 
-        //Get all the donation
-        app.get('/donation',async(req,res)=>{
-            const query = {}
-            const cursor =  donationCollection.find(query);
-            const donations = await cursor.toArray();
+        //JWT get donation base on user email --> used in MyDonation
+        app.get('/donations',async(req,res)=>{
+            let query = {}
+            if(req.query.email){
+                 query = {donor_mail: req.query.email}
+            }
+ 
+            const donations = await donationCollection.find(query).toArray();
             res.send(donations);
-            console.log(donations)
         })
+
+
 
         //Get donation by campaign id
         app.get('/donation/:id',async(req,res)=>{
@@ -61,6 +89,8 @@ async function run(){
             res.send(donation);
 
         })
+
+
 
 
         //Post APIs
