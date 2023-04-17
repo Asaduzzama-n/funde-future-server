@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+const Mailgen = require('mailgen');
+
 const app = express();
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const nodemailer = require("nodemailer");
@@ -20,41 +22,69 @@ const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology:
 
 
 
-
 function sendInvoiceEmail(donation) {
 
-    const {donor_mail,amount,transactionId,campaign_id} = donation;
+    const {donor_mail,amount,transactionId,campaign_id,campaign_name,donor_name} = donation;
 
-    const auth = {
-        auth: {
-          api_key: process.env.EMAIL_SEND_KEY,
-          domain: process.env.EMAIL_DOMAIN
-        }
-      }
-      
-      const transporter = nodemailer.createTransport(mg(auth));
 
-      transporter.sendMail({
-        from: "asaduzzaman193146@gmail.com", // verified sender email
-        to: donor_mail || 'asadshanto310@gmail.com', // recipient email
-        subject: `Thank your for your donation`, // Subject line
-        text: "Hello world!", // plain text body
-        html: `
-        <div>
-            <p>You have donated ${amount} for campaign id: ${campaign_id} </p>
-            <p>Transaction ID:  ${transactionId}</p>
-        </div>
-        
-        `, // html body
-    }, function (error, info) {
-        if (error) {
-            console.log('Email send error', error);
-        } else {
-            console.log('Email sent: ' + info);
+    let config =  {
+        service : 'gmail',
+        auth : {
+            user : process.env.GOOGLE_EMAIL,
+            pass : process.env.GOOGLE_EMAIL_PASS
         }
-    });
+    }
+
+
+    let transporter = nodemailer.createTransport(config);
+
+    let MailGenerator = new Mailgen({
+        theme: "default",
+        product : {
+            name: "FundFuture",
+            link : 'https://mailgen.js/'
+        }
+    })
+
+    let response = {
+        body: {
+            name : donor_name,
+            intro: "",
+            table : {
+                data : [
+                    {
+                        campaign : campaign_name,
+                        description: "Thank you for your donation. Wish you all the best!",
+                        amount : amount,
+                    }
+                ]
+            },
+            outro: "Thank you for being with us!"
+        }
+    }
+
+    let mail = MailGenerator.generate(response)
+
+    let message = {
+        from : process.env.GOOGLE_EMAIL,
+        to : donor_mail,
+        subject: `You have donated ${amount} to ${campaign_name}`,
+        html: mail
+    }
+
+    transporter.sendMail(message).then(() => {
+        return res.status(201).json({
+            msg: "you should receive an email"
+        })
+    }).catch(error => {
+        return res.status(500).json({ error })
+    })
 
 }
+
+
+
+
 
 
 async function run() {
@@ -75,27 +105,6 @@ async function run() {
             const campaigns = await cursor.toArray();
             res.send(campaigns);
         })
-
-
-
-
-        //getting campaign with donation based on campaigner mail and donor mail
-        // app.get('/v2/campaigns',async(req,res)=>{
-        //     const campaignsWithDonation = await campaignCollection.aggregate([
-        //         {
-        //             $lookup:{
-        //                 from:'Donation',
-        //                 localField: 'campaigner_mail',
-        //                 foreignField: 'donor_mail',
-        //                 as:'donations'
-        //             }
-        //         }
-        //     ]).toArray();
-
-        //     res.send(campaignsWithDonation);
-        //     console.log(campaignsWithDonation);
-        // })
-
 
 
 
@@ -141,7 +150,10 @@ async function run() {
 
         //Get success stories
         app.get('/successStories',async(req,res)=>{
-            const query = {};
+            let query = {}
+            if(req.query.email){
+                query = {st_mail: req.query.email}
+            }
             const stories =await storyCollection.find(query).toArray();
             res.send(stories);
         })
@@ -155,6 +167,16 @@ async function run() {
             res.send(story);
         })
 
+
+
+
+        //DELETE APIS
+        app.delete('/successStories/:id',async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) }
+            const result = await storyCollection.deleteOne(query);
+            res.send(result);
+        })
 
 
 
