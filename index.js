@@ -24,14 +24,14 @@ const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology:
 
 function sendInvoiceEmail(donation) {
 
-    const {donor_mail,amount,transactionId,campaign_id,campaign_name,donor_name} = donation;
+    const { donor_mail, amount, transactionId, campaign_id, campaign_name, donor_name } = donation;
 
 
-    let config =  {
-        service : 'gmail',
-        auth : {
-            user : process.env.GOOGLE_EMAIL,
-            pass : process.env.GOOGLE_EMAIL_PASS
+    let config = {
+        service: 'gmail',
+        auth: {
+            user: process.env.GOOGLE_EMAIL,
+            pass: process.env.GOOGLE_EMAIL_PASS
         }
     }
 
@@ -40,22 +40,22 @@ function sendInvoiceEmail(donation) {
 
     let MailGenerator = new Mailgen({
         theme: "default",
-        product : {
+        product: {
             name: "FundFuture",
-            link : 'https://mailgen.js/'
+            link: 'https://mailgen.js/'
         }
     })
 
     let response = {
         body: {
-            name : donor_name,
+            name: donor_name,
             intro: "",
-            table : {
-                data : [
+            table: {
+                data: [
                     {
-                        campaign : campaign_name,
+                        campaign: campaign_name,
                         description: "Thank you for your donation. Wish you all the best!",
-                        amount : amount,
+                        amount: amount,
                     }
                 ]
             },
@@ -66,18 +66,18 @@ function sendInvoiceEmail(donation) {
     let mail = MailGenerator.generate(response)
 
     let message = {
-        from : process.env.GOOGLE_EMAIL,
-        to : donor_mail,
+        from: process.env.GOOGLE_EMAIL,
+        to: donor_mail,
         subject: `You have donated ${amount} to ${campaign_name}`,
         html: mail
     }
 
     transporter.sendMail(message).then(() => {
-        return res.status(201).json({
-            msg: "you should receive an email"
-        })
+        // return res.status(201).json({
+        //     msg: "you should receive an email"
+        // })
     }).catch(error => {
-        return res.status(500).json({ error })
+        // return res.status(500).json({ error })
     })
 
 }
@@ -92,6 +92,7 @@ async function run() {
         const campaignCollection = client.db("fund-future").collection('Campaigns');
         const donationCollection = client.db("fund-future").collection('Donation');
         const storyCollection = client.db("fund-future").collection('Story');
+        const userCollection = client.db("fund-future").collection('Users');
 
 
 
@@ -149,40 +150,83 @@ async function run() {
 
 
         //Get success stories
-        app.get('/successStories',async(req,res)=>{
+        app.get('/successStories', async (req, res) => {
             let query = {}
-            if(req.query.email){
-                query = {st_mail: req.query.email}
+            if (req.query.email) {
+                query = { st_mail: req.query.email }
             }
-            const stories =await storyCollection.find(query).toArray();
+            const stories = await storyCollection.find(query).toArray();
             res.send(stories);
         })
 
         //Get success story
 
-        app.get('/successStory/:id',async(req,res)=>{
+        app.get('/successStory/:id', async (req, res) => {
             const id = req.params.id;
-            const query = {_id: new ObjectId(id)};
-            const story =await storyCollection.findOne(query);
+            const query = { _id: new ObjectId(id) };
+            const story = await storyCollection.findOne(query);
             res.send(story);
         })
 
-
-
-
-        //DELETE APIS
-        app.delete('/successStories/:id',async (req, res) => {
-            const id = req.params.id;
-            const query = { _id: new ObjectId(id) }
-            const result = await storyCollection.deleteOne(query);
+        app.get('/users', async (req, res) => {
+            let query = {};
+            if (req.query.email) {
+                query = { email: req.query.email };
+            }
+            const result = await userCollection.find(query).toArray();
             res.send(result);
         })
 
 
-
-
         //Post APIs ---------------------------------\'''
 
+        //user save
+        app.post('/users', async (req, res) => {
+            const user = req.body;
+            const result = await userCollection.insertOne(user);
+            res.send(result);
+        })
+
+
+        //UPDATE APIS ---> profile
+        app.put('/users', async (req, res) => {
+            const email = req.query.email;
+            const filter = { email: email }
+            const user = req.body;
+            const options = { upsert: true }
+            const updateDoc = {
+                $set: {
+                    phone: user.phone,
+                    profile: user.profile,
+                    address: user.address
+
+                }
+            }
+            const result = await userCollection.updateOne(filter, updateDoc, options);
+            res.send(result);
+        })
+
+
+        //Campaign Update --->EditPart.js
+        app.put('/campaigns/:id', async (req, res) => {
+            const id = req.params.id;
+            const filter = { _id: new ObjectId(id) }
+            const campaign = req.body;
+            const options = { upsert: true }
+            const updateDoc = {
+                $set: {
+                    title: campaign.title,
+                    category: campaign.category,
+                    address: campaign.address,
+                    short_desc: campaign.short_desc,
+                    description: campaign.description,
+                }
+            }
+            const result = await campaignCollection.updateOne(filter, updateDoc, options);
+            res.send(result);
+        })
+
+        //campaign post
         app.post('/campaigns', async (req, res) => {
             const campaign = req.body;
             console.log(campaign);
@@ -221,9 +265,18 @@ async function run() {
         })
 
         //Success Story post------> createStory.js
-        app.post('/successStory',async(req,res)=>{
+        app.post('/successStory', async (req, res) => {
             const story = req.body;
             const result = await storyCollection.insertOne(story);
+            res.send(result);
+        })
+
+
+        //DELETE APIS
+        app.delete('/successStories/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) }
+            const result = await storyCollection.deleteOne(query);
             res.send(result);
         })
 
