@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const Mailgen = require('mailgen');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
@@ -24,7 +25,7 @@ const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology:
 
 function sendInvoiceEmail(donation) {
 
-    const { donor_mail, amount, transactionId, campaign_id, campaign_name, donor_name,charity_name } = donation;
+    const { donor_mail, amount, transactionId, campaign_id, campaign_name, donor_name, charity_name } = donation;
 
 
     let config = {
@@ -85,6 +86,27 @@ function sendInvoiceEmail(donation) {
 
 
 
+function verifyJWT(req, res, next) {
+
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+        return res.status(401).send('unauthorized access');
+    }
+
+    const token = authHeader.split(' ')[1];
+
+    jwt.verify(token, process.env.ACCESS_TOKEN, function (err, decoded) {
+        if (err) {
+            return res.status(403).send({ message: 'forbidden access' })
+        }
+        req.decoded = decoded;
+        next();
+    })
+
+}
+
+
+
 async function run() {
     try {
         const campaignCollection = client.db("fund-future").collection('Campaigns');
@@ -94,20 +116,43 @@ async function run() {
 
 
 
-        //loading all campaign and campaign based on email ... used in campaigns and dashboard ---> myCampaigns
-        app.get('/campaigns', async (req, res) => {
-            let query = {}
-            if (req.query.email) {
-                query = { campaigner_mail: req.query.email }
+        app.get('/jwt', async (req, res) => {
+            const email = req.query.email;
+            const user = await userCollection.findOne({ email: email });
+            if (user) {
+                const token = jwt.sign({ email }, process.env.ACCESS_TOKEN, { expiresIn: '1h' })
+                return res.send({ accessToken: token })
             }
+            res.status(403).send({ accessToken: '' });
+        })
+
+
+
+        //------------------------------------------------------------------->
+
+        //loading all campaign and campaign based on email ... used in campaigns and dashboard ---> myCampaigns
+
+        app.get('/all-campaigns', async (req, res) => {
+            let query = {}
             const cursor = campaignCollection.find(query);
             const campaigns = await cursor.toArray();
             res.send(campaigns);
         })
 
 
+        app.get('/campaigns',verifyJWT, async (req, res) => {
+            const email = req.query.email;
+            const decodedEmail = req.decoded.email;
+            if(email !== decodedEmail){
+                return res.status(403).send({message: 'forbidden-access'})
+            }
+            const query = { campaigner_mail: email }
+            const cursor = campaignCollection.find(query);
+            const campaigns = await cursor.toArray();
+            res.send(campaigns);
+        })
 
-
+        //get campaign by id
         app.get('/campaign/:id', async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) }
@@ -124,17 +169,39 @@ async function run() {
 
         })
 
-        //JWT get all donation and donation based on user email --> used in MyDonation
-        app.get('/donations', async (req, res) => {
+
+        //campaign post
+        app.post('/campaigns', async (req, res) => {
+            const campaign = req.body;
+            console.log(campaign);
+            const result = await campaignCollection.insertOne(campaign);
+            res.send(result);
+
+        })
+
+
+        //---------------------------------------------------------------------------->
+
+
+
+        //Getting all donations information -->|| used in authContext ||
+        app.get('/get-donations', async (req, res) => {
             let query = {}
-            if (req.query.email) {
-                query = { donor_mail: req.query.email }
-            }
             const donations = await donationCollection.find(query).toArray();
             res.send(donations);
         })
 
-
+        //JWT get donation based on user email -->|| used in MyDonation ||
+        app.get('/donations', verifyJWT, async (req, res) => {
+            const email = req.query.email;
+            const decodedEmail = req.decoded.email;
+            if(email !== decodedEmail){
+                return res.status(403).send({message: 'forbidden-access'})
+            }
+            const query = { donor_mail: email }
+            const donations = await donationCollection.find(query).toArray();
+            res.send(donations);
+        })
 
         //Get donation by campaign id
         app.get('/donation/:id', async (req, res) => {
@@ -145,6 +212,10 @@ async function run() {
             res.send(donation);
 
         })
+        //--------------------------------------------------------------------
+
+
+
 
 
         //Get success stories
@@ -166,6 +237,17 @@ async function run() {
             res.send(story);
         })
 
+
+        //Success Story post------> createStory.js
+        app.post('/successStory', async (req, res) => {
+            const story = req.body;
+            const result = await storyCollection.insertOne(story);
+            res.send(result);
+        })
+
+
+        //-----------------------------------------------------------------
+        //Get users || used in myProfile.js ||
         app.get('/users', async (req, res) => {
             let query = {};
             if (req.query.email) {
@@ -176,11 +258,7 @@ async function run() {
         })
 
 
-        //Post APIs ---------------------------------\'''
-
-
-
-        //user save
+        //user save || signup.js ||
         app.post('/users', async (req, res) => {
             const user = req.body;
             const result = await userCollection.insertOne(user);
@@ -188,7 +266,16 @@ async function run() {
         })
 
 
-        //UPDATE APIS ---> profile
+        //Get if the user is admin or not || used in useAdmin hook ||
+        app.get('/users/admin/:email', async (req, res) => {
+            const email = req.params.email;
+            const query = { email }
+            const user = await userCollection.findOne(query);
+            res.send({ isAdmin: user?.role === 'admin' });
+        })
+
+
+        //UPDATE APIS ---> || myProfile.js||
         app.put('/users', async (req, res) => {
             const email = req.query.email;
             const filter = { email: email }
@@ -207,33 +294,15 @@ async function run() {
         })
 
 
-        //Campaign Update --->EditPart.js
-        app.put('/campaigns/:id', async (req, res) => {
-            const id = req.params.id;
-            const filter = { _id: new ObjectId(id) }
-            const campaign = req.body;
-            const options = { upsert: true }
-            const updateDoc = {
-                $set: {
-                    title: campaign.title,
-                    category: campaign.category,
-                    address: campaign.address,
-                    short_desc: campaign.short_desc,
-                    description: campaign.description,
-                }
-            }
-            const result = await campaignCollection.updateOne(filter, updateDoc, options);
-            res.send(result);
-        })
 
-        //campaign post
-        app.post('/campaigns', async (req, res) => {
-            const campaign = req.body;
-            console.log(campaign);
-            const result = await campaignCollection.insertOne(campaign);
-            res.send(result);
+        //--------------------------------------------------------------->
 
-        })
+
+
+                //----|Others|
+
+
+
 
 
         //Stripe  donation Intent--->
@@ -274,12 +343,30 @@ async function run() {
             res.send(result);
         })
 
-        //Success Story post------> createStory.js
-        app.post('/successStory', async (req, res) => {
-            const story = req.body;
-            const result = await storyCollection.insertOne(story);
+
+
+
+
+        //Campaign Update --->EditPart.js
+        app.put('/campaigns/:id', async (req, res) => {
+            const id = req.params.id;
+            const filter = { _id: new ObjectId(id) }
+            const campaign = req.body;
+            const options = { upsert: true }
+            const updateDoc = {
+                $set: {
+                    title: campaign.title,
+                    category: campaign.category,
+                    address: campaign.address,
+                    short_desc: campaign.short_desc,
+                    description: campaign.description,
+                }
+            }
+            const result = await campaignCollection.updateOne(filter, updateDoc, options);
             res.send(result);
         })
+
+
 
 
         //DELETE APIS
@@ -303,7 +390,7 @@ async function run() {
                 charity_img: "https://www.ourislam24.com/wp-content/uploads/2021/06/as-sunnah-logo.jpg",
                 charity_contact: "+88-09610-001089",
                 charity_email: "assunnahfoundationbd@gmail.com",
-                charity_campaigns:['Zakat','Orphan Fund','Sadaqah Jariyah Fund']
+                charity_campaigns: ['Zakat', 'Orphan Fund', 'Sadaqah Jariyah Fund']
             },
             {
                 _id: '2',
@@ -312,7 +399,7 @@ async function run() {
                 charity_img: "https://upload.wikimedia.org/wikipedia/en/2/23/Bidiyanondo_Foudition_logo.svg",
                 charity_contact: "+88-09610-001089",
                 charity_email: "assunnahfoundationbd@gmail.com",
-                charity_campaigns:['এক টাকায় আহার - 1 Taka Meal','সম্বল - Sombol','বিদ্যানন্দ অনাথালয়']
+                charity_campaigns: ['এক টাকায় আহার - 1 Taka Meal', 'সম্বল - Sombol', 'বিদ্যানন্দ অনাথালয়']
 
             },
             {
@@ -322,7 +409,7 @@ async function run() {
                 charity_img: "https://new-media.dhakatribune.com/en/uploads/2021/10/23/actionaid.jpeg",
                 charity_contact: "+88-09610-001089",
                 charity_email: "assunnahfoundationbd@gmail.com",
-                charity_campaigns:['EMPOWERING SPORTS WOMEN: A CELEBRATION OF FIFA WORLD CUP 2018','SHORT FILM MAKING COMPETITION ON UNPAID CARE WORK','SAFE CITY']
+                charity_campaigns: ['EMPOWERING SPORTS WOMEN: A CELEBRATION OF FIFA WORLD CUP 2018', 'SHORT FILM MAKING COMPETITION ON UNPAID CARE WORK', 'SAFE CITY']
 
             }
         ]
@@ -330,12 +417,12 @@ async function run() {
 
 
 
-        app.get('/charity',(req,res)=>{
+        app.get('/charity', (req, res) => {
             res.send(charities);
         })
 
 
-        app.get('/charity/:id',(req,res)=>{
+        app.get('/charity/:id', (req, res) => {
             const id = req.params.id;
             const charity = charities.find(charity => charity._id === id);
             res.send(charity);
