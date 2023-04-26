@@ -86,6 +86,64 @@ function sendInvoiceEmail(donation) {
 
 
 
+
+//================================
+function sendContactMail(mailInfo) {
+
+    const { mailTo, mailBody,mailSubject,mailToName} = mailInfo;
+
+
+    let config = {
+        service: 'gmail',
+        auth: {
+            user: process.env.GOOGLE_EMAIL,
+            pass: process.env.GOOGLE_EMAIL_PASS
+        }
+    }
+
+
+    let transporter = nodemailer.createTransport(config);
+
+    let MailGenerator = new Mailgen({
+        theme: "default",
+        product: {
+            name: "FundFuture",
+            link: 'https://mailgen.js/'
+        }
+    })
+
+    let response = {
+        body: {
+            name: mailToName,
+            intro: mailBody,
+            
+            outro: 'Need help, or have questions? Just reply to this email, we\'d love to help.'
+        }
+    }
+
+    let mail = MailGenerator.generate(response)
+
+    let message = {
+        from: process.env.GOOGLE_EMAIL,
+        to: mailTo,
+        subject: mailSubject,
+        html: mail
+    }
+
+    transporter.sendMail(message).then(() => {
+        // return res.status(201).json({
+        //     msg: "you should receive an email"
+        // })
+    }).catch(error => {
+        // return res.status(500).json({ error })
+    })
+
+}
+
+
+
+
+
 function verifyJWT(req, res, next) {
 
     const authHeader = req.headers.authorization;
@@ -140,11 +198,11 @@ async function run() {
         })
 
 
-        app.get('/campaigns',verifyJWT, async (req, res) => {
+        app.get('/campaigns', verifyJWT, async (req, res) => {
             const email = req.query.email;
             const decodedEmail = req.decoded.email;
-            if(email !== decodedEmail){
-                return res.status(403).send({message: 'forbidden-access'})
+            if (email !== decodedEmail) {
+                return res.status(403).send({ message: 'forbidden-access' })
             }
             const query = { campaigner_mail: email }
             const cursor = campaignCollection.find(query);
@@ -180,6 +238,44 @@ async function run() {
         })
 
 
+        //Campaign Update --->EditPart.js
+        app.put('/campaigns/:id', async (req, res) => {
+            const id = req.params.id;
+            const filter = { _id: new ObjectId(id) }
+            const campaign = req.body;
+            const options = { upsert: true }
+            const updateDoc = {
+                $set: {
+                    title: campaign.title,
+                    category: campaign.category,
+                    address: campaign.address,
+                    short_desc: campaign.short_desc,
+                    description: campaign.description,
+                }
+            }
+            const result = await campaignCollection.updateOne(filter, updateDoc, options);
+            res.send(result);
+        })
+
+
+        //=================== ADMIN ========================
+
+        app.put('/campaign/admin/:id', async (req, res) => {
+            const id = req.params.id;
+            const status = req.body;
+            const filter = { _id: new ObjectId(id) }
+            const options = { upsert: true };
+            const updateDoc = {
+                $set: {
+                    status: status.status
+                }
+            }
+            const result = await campaignCollection.updateOne(filter, updateDoc, options);
+            res.send(result);
+            // console.log(id,status);
+        })
+
+
         //---------------------------------------------------------------------------->
 
 
@@ -195,8 +291,8 @@ async function run() {
         app.get('/donations', verifyJWT, async (req, res) => {
             const email = req.query.email;
             const decodedEmail = req.decoded.email;
-            if(email !== decodedEmail){
-                return res.status(403).send({message: 'forbidden-access'})
+            if (email !== decodedEmail) {
+                return res.status(403).send({ message: 'forbidden-access' })
             }
             const query = { donor_mail: email }
             const donations = await donationCollection.find(query).toArray();
@@ -246,13 +342,29 @@ async function run() {
         })
 
 
+        //DELETE APIS
+        app.delete('/successStories/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) }
+            const result = await storyCollection.deleteOne(query);
+            res.send(result);
+        })
+
+
+
         //-----------------------------------------------------------------
         //Get users || used in myProfile.js ||
-        app.get('/users', async (req, res) => {
+
+
+        app.get('/all-users', async (req, res) => {
             let query = {};
-            if (req.query.email) {
-                query = { email: req.query.email };
-            }
+            const result = await userCollection.find(query).toArray();
+            res.send(result);
+        })
+
+        app.get('/users', async (req, res) => {
+
+            const query = { email: req.query.email };
             const result = await userCollection.find(query).toArray();
             res.send(result);
         })
@@ -299,7 +411,7 @@ async function run() {
 
 
 
-                //----|Others|
+        //----|Others|
 
 
 
@@ -339,43 +451,18 @@ async function run() {
             const contactMail = req.body;
             // const result = await donationCollection.insertOne(donation);
             //Send email----> invoice
-            sendInvoiceEmail(donation);
-            res.send(result);
+            sendContactMail(contactMail);
+            res.send({send: 'success'});
         })
 
 
 
 
 
-        //Campaign Update --->EditPart.js
-        app.put('/campaigns/:id', async (req, res) => {
-            const id = req.params.id;
-            const filter = { _id: new ObjectId(id) }
-            const campaign = req.body;
-            const options = { upsert: true }
-            const updateDoc = {
-                $set: {
-                    title: campaign.title,
-                    category: campaign.category,
-                    address: campaign.address,
-                    short_desc: campaign.short_desc,
-                    description: campaign.description,
-                }
-            }
-            const result = await campaignCollection.updateOne(filter, updateDoc, options);
-            res.send(result);
-        })
 
 
 
 
-        //DELETE APIS
-        app.delete('/successStories/:id', async (req, res) => {
-            const id = req.params.id;
-            const query = { _id: new ObjectId(id) }
-            const result = await storyCollection.deleteOne(query);
-            res.send(result);
-        })
 
 
 
