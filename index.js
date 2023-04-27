@@ -263,11 +263,17 @@ async function run() {
         app.put('/campaign/admin/:id', async (req, res) => {
             const id = req.params.id;
             const status = req.body;
+            let end_date = '';
+            if(status.status === 'finished'){
+                 end_date = JSON.stringify(new Date());
+            }
             const filter = { _id: new ObjectId(id) }
             const options = { upsert: true };
             const updateDoc = {
                 $set: {
-                    status: status.status
+                    status: status.status,
+                    end_date: end_date
+
                 }
             }
             const result = await campaignCollection.updateOne(filter, updateDoc, options);
