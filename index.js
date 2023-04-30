@@ -171,6 +171,7 @@ async function run() {
         const donationCollection = client.db("fund-future").collection('Donation');
         const storyCollection = client.db("fund-future").collection('Story');
         const userCollection = client.db("fund-future").collection('Users');
+        const messageCollection = client.db("fund-future").collection('Messages');
 
 
 
@@ -178,7 +179,7 @@ async function run() {
             const email = req.query.email;
             const user = await userCollection.findOne({ email: email });
             if (user) {
-                const token = jwt.sign({ email }, process.env.ACCESS_TOKEN, { expiresIn: '1h' })
+                const token = jwt.sign({ email }, process.env.ACCESS_TOKEN, { expiresIn: '2h' })
                 return res.send({ accessToken: token })
             }
             res.status(403).send({ accessToken: '' });
@@ -239,7 +240,7 @@ async function run() {
 
 
         //Campaign Update --->EditPart.js
-        app.put('/campaigns/:id', async (req, res) => {
+        app.put('/campaigns/:id',verifyJWT, async (req, res) => {
             const id = req.params.id;
             const filter = { _id: new ObjectId(id) }
             const campaign = req.body;
@@ -251,6 +252,7 @@ async function run() {
                     address: campaign.address,
                     short_desc: campaign.short_desc,
                     description: campaign.description,
+                    lastModified: new Date()
                 }
             }
             const result = await campaignCollection.updateOne(filter, updateDoc, options);
@@ -260,7 +262,7 @@ async function run() {
 
         //=================== ADMIN ========================
 
-        app.put('/campaign/admin/:id', async (req, res) => {
+        app.put('/campaign/admin/:id',verifyJWT, async (req, res) => {
             const id = req.params.id;
             const status = req.body;
             let end_date = '';
@@ -403,7 +405,8 @@ async function run() {
                 $set: {
                     phone: user.phone,
                     profile: user.profile,
-                    address: user.address
+                    address: user.address,
+                    lastModified: new Date()
 
                 }
             }
@@ -452,8 +455,8 @@ async function run() {
         })
 
 
-        //send mail to campaigner --->ContactModal.js
-        app.post('/sendEmail', async (req, res) => {
+        //send mail to campaigner --->Dashboard -> adminDashboard -> SharedComponent -> UserInfoModal.js
+        app.post('/sendEmail',verifyJWT, async (req, res) => {
             const contactMail = req.body;
             // const result = await donationCollection.insertOne(donation);
             //Send email----> invoice
@@ -462,6 +465,21 @@ async function run() {
         })
 
 
+
+        //Message
+
+        app.get('/messages/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = {campaign_id : id};
+            const result = await messageCollection.find(query).toArray();
+            res.send(result);
+        })
+
+        app.post('/message', async (req, res) => {
+            const message = req.body;
+            const result = await messageCollection.insertOne(message);
+            res.send(result);
+        })
 
 
 
