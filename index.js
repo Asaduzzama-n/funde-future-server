@@ -381,8 +381,18 @@ async function run() {
         //user save || signup.js ||
         app.post('/users', async (req, res) => {
             const user = req.body;
-            const result = await userCollection.insertOne(user);
-            res.send(result);
+            console.log(user.email)
+            const query = {email: user.email}
+            const exists = await userCollection.findOne(query);
+            if(!exists){
+                const result = await userCollection.insertOne(user);
+                res.send(result);
+            }else{
+                res.send('already exist!');
+            }
+            
+
+
         })
 
 
