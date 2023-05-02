@@ -90,7 +90,7 @@ function sendInvoiceEmail(donation) {
 //================================
 function sendContactMail(mailInfo) {
 
-    const { mailTo, mailBody,mailSubject,mailToName} = mailInfo;
+    const { mailTo, mailBody, mailSubject, mailToName } = mailInfo;
 
 
     let config = {
@@ -116,7 +116,7 @@ function sendContactMail(mailInfo) {
         body: {
             name: mailToName,
             intro: mailBody,
-            
+
             outro: 'Need help, or have questions? Just reply to this email, we\'d love to help.'
         }
     }
@@ -172,6 +172,7 @@ async function run() {
         const storyCollection = client.db("fund-future").collection('Story');
         const userCollection = client.db("fund-future").collection('Users');
         const messageCollection = client.db("fund-future").collection('Messages');
+        const donationAuditCollection = client.db("fund-future").collection('donationAudit');
 
 
 
@@ -240,7 +241,7 @@ async function run() {
 
 
         //Campaign Update --->EditPart.js
-        app.put('/campaigns/:id',verifyJWT, async (req, res) => {
+        app.put('/campaigns/:id', verifyJWT, async (req, res) => {
             const id = req.params.id;
             const filter = { _id: new ObjectId(id) }
             const campaign = req.body;
@@ -262,12 +263,12 @@ async function run() {
 
         //=================== ADMIN ========================
 
-        app.put('/campaign/admin/:id',verifyJWT, async (req, res) => {
+        app.put('/campaign/admin/:id', verifyJWT, async (req, res) => {
             const id = req.params.id;
             const status = req.body;
             let end_date = '';
-            if(status.status === 'finished'){
-                 end_date = JSON.stringify(new Date());
+            if (status.status === 'finished') {
+                end_date = JSON.stringify(new Date());
             }
             const filter = { _id: new ObjectId(id) }
             const options = { upsert: true };
@@ -381,16 +382,16 @@ async function run() {
         //user save || signup.js ||
         app.post('/users', async (req, res) => {
             const user = req.body;
-            console.log(user.email)
-            const query = {email: user.email}
+            // console.log(user.email)
+            const query = { email: user.email }
             const exists = await userCollection.findOne(query);
-            if(!exists){
+            if (!exists) {
                 const result = await userCollection.insertOne(user);
                 res.send(result);
-            }else{
+            } else {
                 res.send('already exist!');
             }
-            
+
 
 
         })
@@ -466,12 +467,12 @@ async function run() {
 
 
         //send mail to campaigner --->Dashboard -> adminDashboard -> SharedComponent -> UserInfoModal.js
-        app.post('/sendEmail',verifyJWT, async (req, res) => {
+        app.post('/sendEmail', verifyJWT, async (req, res) => {
             const contactMail = req.body;
             // const result = await donationCollection.insertOne(donation);
             //Send email----> invoice
             sendContactMail(contactMail);
-            res.send({send: 'success'});
+            res.send({ send: 'success' });
         })
 
 
@@ -480,7 +481,7 @@ async function run() {
 
         app.get('/messages/:id', async (req, res) => {
             const id = req.params.id;
-            const query = {campaign_id : id};
+            const query = { campaign_id: id };
             const result = await messageCollection.find(query).toArray();
             res.send(result);
         })
@@ -549,6 +550,22 @@ async function run() {
             res.send(charity);
         })
 
+
+
+        //Audit trail ==================
+
+        app.post('/donationAuditTrail', async (req, res) => {
+            const auditInfo = req.body;
+            const result = await donationAuditCollection.insertOne(auditInfo);
+            res.send(result);
+        })
+
+        app.get('/donationAuditTrail', async (req, res) => {
+            // const id = req.params.id;
+            const query = {}
+            const result = await donationAuditCollection.find(query).toArray();
+            res.send(result);
+        })
 
 
 
