@@ -173,6 +173,7 @@ async function run() {
         const userCollection = client.db("fund-future").collection('Users');
         const messageCollection = client.db("fund-future").collection('Messages');
         const donationAuditCollection = client.db("fund-future").collection('donationAudit');
+        const bookMarkCollection = client.db("fund-future").collection('bookMarks');
 
 
 
@@ -189,6 +190,9 @@ async function run() {
 
 
         //------------------------------------------------------------------->
+
+
+
 
         //loading all campaign and campaign based on email ... used in campaigns and dashboard ---> myCampaigns
 
@@ -229,9 +233,54 @@ async function run() {
 
         })
 
+        //////////////////////////////
+
+        // app.put('/bookmarks', async (req, res) => {
+        //     const data = req.body;
+        //     console.log(data.campaignId);
+        //     const query = { campaignId: data.campaignId };
+        //     const bookMarks = await bookMarkCollection.find(query).toArray();
+        //     const filtered = bookMarks.filter(bookMark => bookMark.userEmail === data.userEmail);
+        //     console.log(filtered);
+
+        //     if (filtered == []) {
+        //         console.log("if")
+        //         const filter = { campaignId: data.campaignId}
+        //         const options = { upsert: true }
+        //         const updateDoc = {
+        //             $set: {
+        //                 campaignId: data.campaignId,
+        //                 userEmail: data.userEmail,
+        //                 status: 1
+        //             }
+        //         }
+        //         const result = await bookMarkCollection.updateOne(filter, updateDoc, options);
+        //         res.send(result);
+        //     } else {
+        //         console.log("else")
+        //         const filter = { campaignId: data.campaignId}
+        //         const options = { upsert: true }
+        //         const updateDoc = {
+        //             $set: {
+        //                 campaignId: data.campaignId,
+        //                 userEmail: data.userEmail,
+        //                 status: 0
+        //             }
+        //         }
+        //         const result = await bookMarkCollection.updateOne(filter, updateDoc, options);
+        //         res.send(result);
+        //     }
+
+        //     // console.log(filtered);
+
+        //     // console.log(data);
+        // })
+
+
+
 
         //campaign post
-        app.post('/campaigns', async (req, res) => {
+        app.put('/campaigns', async (req, res) => {
             const campaign = req.body;
             console.log(campaign);
             const result = await campaignCollection.insertOne(campaign);
@@ -567,6 +616,33 @@ async function run() {
             res.send(result);
         })
 
+
+
+        //---------------BOOKMARK
+        app.get('/bookmarks',async (req,res)=>{
+            let query = {}
+            if (req.query.email) {
+                query = { userEmail: req.query.email }
+            }
+            const result = await bookMarkCollection.find(query).toArray();
+            res.send(result);
+        })
+
+        app.post('/bookmarks', async (req, res) => {
+            const bookMarkInfo = req.body;
+            const result = await bookMarkCollection.insertOne(bookMarkInfo);
+            res.send(result);
+        })
+        
+        app.delete('/bookmarks/', async (req, res) => {
+            const bookMarkInfo = req.body;
+
+            const query = {campaignId: bookMarkInfo.campaignId , userEmail: bookMarkInfo.userEmail}
+            const result = await bookMarkCollection.deleteOne(query);
+            console.log(bookMarkInfo)
+            console.log(result)
+            res.send(result);
+        })
 
 
 
